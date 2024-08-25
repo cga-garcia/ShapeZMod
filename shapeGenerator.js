@@ -67,15 +67,18 @@ class ShapeGeneratorSystem extends shapez.GameSystemWithFilter {
       const ejectComp = entity.components.ItemEjector;
       const shapeComp = entity.components.ShapeGenerator;
 
+      // ***** capture current time + init component if needed *****
       let currentTime = this.root.time.now();
       if (!shapeComp.nextEjectTime) {
         shapeComp.nextEjectTime = currentTime;
       }
 
+      // ***** not time to eject *****
       if (currentTime <= shapeComp.nextEjectTime) {
         continue;
       }
 
+      // ***** eject a shape *****
       if (shapez.ShapeDefinition.isValidShortKey(shapeComp.key)) {
         shapeComp.nextEjectTime += 1.0 / shapeComp.perSec;
         let generatedItem = shapez.ShapeDefinition.fromShortKey(shapeComp.key);
