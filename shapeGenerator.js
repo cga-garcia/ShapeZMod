@@ -3,36 +3,44 @@ const METADATA = {
     website: "https://github.com/RevenMyst/ShapeZMod",
     author: "Reven",
     name: "Shape Generator",
-    version: "1.0",
+    version: "1.3.2",
     id: "reven-shape-generator-mod",
-    description: "add building that generates any shape at the speed you want",
+    description: "add building that generates any shape/color dye at the speed you want",
     minimumGameVersion: ">=1.5.0",
+    modId: "1779706"
 };
 
 class ShapeGeneratorComponent extends shapez.Component {
+    constructor() {
+        super();
+		
+        this.nextEjectTime = 0.0;
+        this.key = ""
+        this.perSec = 1
+    }
+
     static getId() {
         return "ShapeGenerator";
     }
-    constructor() {
-        super();
-        this.lastTime = 0;
-        this.key = ""
-        this.perSec = 1
-        
-    }
+
     static getSchema() {
         return {
             key: shapez.types.string,
             perSec: shapez.types.int,
         };
     }
+
+    copyAdditionalStateTo(otherComponent) {
+        otherComponent.key = this.key;
+        otherComponent.perSec = this.perSec;
+    }
 }
+
 class ShapeGeneratorSystem extends shapez.GameSystemWithFilter {
     constructor(root) {
         super(root, [ShapeGeneratorComponent]);
 
         this.root.signals.entityManuallyPlaced.add(entity => {
-
             const editorHud = this.root.hud.parts.shapeGeneratorEdit;
             if (editorHud) {
                 editorHud.editShapeGeneratorText(entity, { deleteOnCancel: true });
@@ -40,24 +48,63 @@ class ShapeGeneratorSystem extends shapez.GameSystemWithFilter {
         });
     }
 
-
+    isColor(str) {
+        return str == "red" || str == "blue" || str == "yellow" || str == "green" || str == "cyan" || str == "white" || str == "purple";
+    }
 
     update() {
         for (let i = 0; i < this.allEntities.length; ++i) {
-
             const entity = this.allEntities[i];
             const ejectComp = entity.components.ItemEjector;
             const shapeComp = entity.components.ShapeGenerator;
 
-            if (this.root.time.now() - shapeComp.lastTime > (1/shapeComp.perSec) && shapez.ShapeDefinition.isValidShortKey(shapeComp.key)) {
-                
+			let currentTime = this.root.time.now();
+			if (!shapeComp.nextEjectTime) {
+				shapeComp.nextEjectTime = currentTime;
+			}
+			
+            if (currentTime <= shapeComp.nextEjectTime) {
+				continue;
+			}
 
-                shapeComp.lastTime = this.root.time.now()
-                let generatedItem = shapez.ShapeDefinition.fromShortKey(shapeComp.key)
-                ejectComp.tryEject(0, new shapez.ShapeItem(generatedItem))
-                
+			if (shapez.ShapeDefinition.isValidShortKey(shapeComp.key)) {
+				shapeComp.nextEjectTime += (1.0 / shapeComp.perSec);
+				let generatedItem = shapez.ShapeDefinition.fromShortKey(shapeComp.key)
+				ejectComp.tryEject(0, new shapez.ShapeItem(generatedItem));
+			}
+			else if (this.isColor(shapeComp.key)) {
+				shapeComp.nextEjectTime += (1.0 / shapeComp.perSec);
+				ejectComp.tryEject(0, new shapez.ColorItem(shapeComp.key));
+			}
+        }
+    }
+
+    drawChunk(parameters, chunk) { 
+        const contents = chunk.containedEntitiesByLayer.regular;
+        for (let i = 0; i < contents.length; ++i) {
+            const entity = contents[i];
+			
+            const shapeComp = entity.components.ShapeGenerator;
+            if (!shapeComp) {
+                continue;
             }
-            
+
+            const staticComp = entity.components.StaticMapEntity;
+            const center = staticComp.getTileSpaceBounds().getCenter().toWorldSpace();
+
+            // Culling for better performance
+            if (parameters.visibleRect.containsCircle(center.x, center.y, 40)) {
+                if (shapez.ShapeDefinition.isValidShortKey(shapeComp.key)) {
+                    let item = new shapez.ShapeItem(shapez.ShapeDefinition.fromShortKey(shapeComp.key))
+					item.drawItemCenteredClipped(
+						center.x,
+						center.y,
+						parameters,
+						shapez.globalConfig.tileSize * 0.65
+					);
+                }
+
+            }
         }
     }
 
@@ -66,10 +113,6 @@ class ShapeGeneratorSystem extends shapez.GameSystemWithFilter {
 class MetaShapeGeneratorBuilding extends shapez.ModMetaBuilding {
     constructor() {
         super("shape_generator");
-    }
-
-    getIsUnlocked(root) {
-        return true;
     }
 
     static getAllVariantCombinations() {
@@ -86,10 +129,11 @@ class MetaShapeGeneratorBuilding extends shapez.ModMetaBuilding {
         ];
     }
 
-    
+    getIsUnlocked(root) {
+        return true;
+    }
 
     setupEntityComponents(entity) {
-
         // add ejector
         entity.addComponent(
             new shapez.ItemEjectorComponent({
@@ -99,7 +143,6 @@ class MetaShapeGeneratorBuilding extends shapez.ModMetaBuilding {
 
         // set custom processor 
         entity.addComponent(new ShapeGeneratorComponent());
-
     }
 }
 
@@ -107,28 +150,80 @@ class HUDShapeGeneratorEdit extends shapez.BaseHUDPart {
     initialize() {
         this.root.camera.downPreHandler.add(this.downPreHandler, this);
     }
-
     
     downPreHandler(pos, button) {
-        
-
         const tile = this.root.camera.screenToWorld(pos).toTileSpace();
+		
         const contents = this.root.map.getLayerContentXY(tile.x, tile.y, "regular");
-        if (contents) {
-            const shapeGenComp = contents.components.ShapeGenerator;
-            if (shapeGenComp) {
-                if (button === shapez.enumMouseButton.left) {
-                    this.editShapeGeneratorText(contents, {
-                        deleteOnCancel: false,
-                    });
-                    return shapez.STOP_PROPAGATION;
-                }
-            }
-        }
+		if (!contents) {
+			return;
+		}
+
+		const shapeGenComp = contents.components.ShapeGenerator;
+		if (!shapeGenComp) {
+			return;
+		}
+		
+		if (button === shapez.enumMouseButton.left) {
+			this.editShapeGeneratorText(contents, {
+				deleteOnCancel: false,
+			});
+			return shapez.STOP_PROPAGATION;
+		}
     }
 
+    isColor(str) {
+        return str == "red" || str == "blue" || str == "yellow" || str == "green" || str == "cyan" || str == "white" || str == "purple";
+    }
     
     editShapeGeneratorText(entity, { deleteOnCancel = true }) {
+
+        const items = [
+			new shapez.ColorItem("red"),
+			new shapez.ColorItem("green"),
+			new shapez.ColorItem("blue"),
+			new shapez.ColorItem("yellow"),
+			new shapez.ColorItem("cyan"),
+			new shapez.ColorItem("purple"),
+			new shapez.ColorItem("white")
+		];
+
+        items.push(
+            this.root.shapeDefinitionMgr.getShapeItemFromShortKey(
+                this.root.gameMode.getBlueprintShapeKey()
+            )
+        );
+
+        if (!entity.components.WiredPins) {
+            // producer which can produce virtually anything
+            const shapes = ["CuCuCuCu", "RuRuRuRu", "WuWuWuWu", "SuSuSuSu"];
+            items.unshift(
+                ...shapes.reverse().map(key => this.root.shapeDefinitionMgr.getShapeItemFromShortKey(key))
+            );
+        }
+
+        if (this.root.gameMode.hasHub()) {
+            items.push(
+                this.root.shapeDefinitionMgr.getShapeItemFromDefinition(
+                    this.root.hubGoals.currentGoal.definition
+                )
+            );
+        }
+
+        if (this.root.hud.parts.pinnedShapes) {
+            items.push(
+                ...this.root.hud.parts.pinnedShapes.pinnedShapes.map(key =>
+                    this.root.shapeDefinitionMgr.getShapeItemFromShortKey(key)
+                )
+            );
+        }
+
+        const itemInput = new shapez.FormElementItemChooser({
+            id: "signalItem",
+            label: null,
+            items,
+        });
+
         const shapeGenComp = entity.components.ShapeGenerator;
         if (!shapeGenComp) {
             return;
@@ -140,14 +235,16 @@ class HUDShapeGeneratorEdit extends shapez.BaseHUDPart {
             id: "shapeGeneratorKey",
             placeholder: "Enter a shape key",
             defaultValue: shapeGenComp.key,
-            validator: val => shapez.ShapeDefinition.isValidShortKey(val),
+            validator: val => shapez.ShapeDefinition.isValidShortKey(val) || this.isColor(val),
         });
+
         console.log(shapeGenComp.perSec)
+
         const intInput = new shapez.FormElementInput({
             id: "shapeGeneratorPerSec",
             placeholder: "How many per second",
             defaultValue: shapeGenComp.perSec.toString(),
-            validator: val => parseInt(val) > 0 && parseInt(val) < 32,
+            validator: val => parseInt(val) > 0 && parseInt(val) <= 32,
         });
 
         // create the dialog & show it
@@ -155,11 +252,23 @@ class HUDShapeGeneratorEdit extends shapez.BaseHUDPart {
             app: this.root.app,
             title: "Shape Generator",
             desc: "Enter the shape Key and the number of shape you want per second (integer between 1 and 32).",
-            formElements: [textInput,intInput],
+            formElements: [itemInput,textInput,intInput],
             buttons: ["cancel:bad:escape", "ok:good:enter"],
             closeButton: false,
         });
+		
         this.root.hud.parts.dialogs.internalShowDialog(dialog);
+
+        dialog.valueChosen.add(() => {
+            console.log(itemInput.chosenItem);
+            
+            if (itemInput.chosenItem._type == "color") {
+                textInput.setValue(itemInput.chosenItem.color);
+            }
+			else if (itemInput.chosenItem._type == "shape") {
+                textInput.setValue(itemInput.chosenItem.definition.cachedHash);
+            }
+        });
 
         // When confirmed, set the text
         dialog.buttonSignals.ok.add(() => {
@@ -232,6 +341,7 @@ class Mod extends shapez.Mod {
             id: "shapeGenerator",
             systemClass: ShapeGeneratorSystem,
             before: "constantSignal",
+            drawHooks: ["staticAfter"],
         });
 
         this.modInterface.registerHudElement("shapeGeneratorEdit", HUDShapeGeneratorEdit);
