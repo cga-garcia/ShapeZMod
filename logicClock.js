@@ -17,8 +17,8 @@ class ClockComponent extends shapez.Component {
     super();
     this.nextSwitchTime = 0;
     this.isOn = false;
-    this.up = 1;
-    this.down = 1;
+    this.up = 500;
+    this.down = 500;
   }
   static getSchema() {
     return {
@@ -63,12 +63,12 @@ class ClockSystem extends shapez.GameSystemWithFilter {
 
       if (clockComp.isOn) {
         // ***** turn it off *****
-        clockComp.nextSwitchTime += clockComp.down / 10;
+        clockComp.nextSwitchTime += Number(clockComp.down) / 1000.0;
         clockComp.isOn = false;
         wireComp.slots[0].value = this.off;
       } else {
         // ***** turn it on *****
-        clockComp.nextSwitchTime += clockComp.up / 10;
+        clockComp.nextSwitchTime += Number(clockComp.up) / 1000.0;
         clockComp.isOn = true;
         wireComp.slots[0].value = this.on;
       }
@@ -173,7 +173,7 @@ class HUDClockEdit extends shapez.BaseHUDPart {
     const dialog = new shapez.DialogWithForm({
       app: this.root.app,
       title: "Logic Clock",
-      desc: "Enter the number of tenth of second you want the signal to be up (true) or down (false)",
+      desc: "Enter the number of milliseconds you want the signal to be up (true) or down (false)",
       formElements: [upInput, downInput],
       buttons: ["cancel:bad:escape", "ok:good:enter"],
       closeButton: false,
