@@ -15,7 +15,7 @@ class ClockComponent extends shapez.Component {
   }
   constructor() {
     super();
-    this.lastTime = 0;
+    this.nextSwitchTime = 0;
     this.isOn = false;
     this.up = 1;
     this.down = 1;
@@ -50,18 +50,25 @@ class ClockSystem extends shapez.GameSystemWithFilter {
       const wireComp = entity.components.WiredPins;
       const clockComp = entity.components.Clock;
 
-      if (
-        clockComp.isOn &&
-        this.root.time.now() - clockComp.lastTime > clockComp.up / 10
-      ) {
-        clockComp.lastTime = this.root.time.now();
+      // ***** capture current time + init component if needed *****
+      let currentTime = this.root.time.now();
+      if (!clockComp.nextSwitchTime) {
+        clockComp.nextSwitchTime = currentTime;
+      }
+
+      // ***** not time to switch *****
+      if (currentTime <= shapeComp.nextSwitchTime) {
+        continue;
+      }
+
+      if (clockComp.isOn) {
+        // ***** turn it off *****
+        clockComp.nextSwitchTime += clockComp.down / 10;
         clockComp.isOn = false;
         wireComp.slots[0].value = this.off;
-      } else if (
-        !clockComp.isOn &&
-        this.root.time.now() - clockComp.lastTime > clockComp.down / 10
-      ) {
-        clockComp.lastTime = this.root.time.now();
+      } else {
+        // ***** turn it on *****
+        clockComp.nextSwitchTime += clockComp.up / 10;
         clockComp.isOn = true;
         wireComp.slots[0].value = this.on;
       }
