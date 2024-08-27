@@ -57,7 +57,7 @@ class ClockSystem extends shapez.GameSystemWithFilter {
       }
 
       // ***** not time to switch *****
-      if (currentTime <= shapeComp.nextSwitchTime) {
+      if (currentTime <= clockComp.nextSwitchTime) {
         continue;
       }
 
