@@ -51,7 +51,7 @@ class ClockSystem extends shapez.GameSystemWithFilter {
       const clockComp = entity.components.Clock;
 
       // ***** capture current time + init component if needed *****
-      let currentTime = this.root.time.now();
+      let currentTime = Date.now();   // epoch UTC miliseconds (javascript)
       if (!clockComp.nextSwitchTime) {
         clockComp.nextSwitchTime = currentTime;
       }
@@ -63,12 +63,12 @@ class ClockSystem extends shapez.GameSystemWithFilter {
 
       if (clockComp.isOn) {
         // ***** turn it off *****
-        clockComp.nextSwitchTime += Number(clockComp.down) / 1000.0;
+        clockComp.nextSwitchTime += clockComp.down;
         clockComp.isOn = false;
         wireComp.slots[0].value = this.off;
       } else {
         // ***** turn it on *****
-        clockComp.nextSwitchTime += Number(clockComp.up) / 1000.0;
+        clockComp.nextSwitchTime += clockComp.up;
         clockComp.isOn = true;
         wireComp.slots[0].value = this.on;
       }
